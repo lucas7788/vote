@@ -31,8 +31,8 @@ struct Topic {
     topic_detail: Vec<u8>,
 }
 
-impl VmValueDecoder for Topic {
-    fn deserialize(parser: &mut VmValueParser) -> Result<Self, Error> {
+impl<'a> VmValueDecoder<'a> for Topic {
+    fn deserialize(parser: &mut VmValueParser<'a>) -> Result<Self, Error> {
         let ty = parser.source.read_byte()?;
         assert_eq!(ty,0x10);
         let _ = parser.source.read_u32()?;
@@ -215,11 +215,8 @@ fn get_topic(hash: &H256) -> Option<Topic> {
         let topic = neo::call_contract(&NEO_VOTE_CONTRACT_ADDRESS, ("getTopic", (hash.as_ref() as &[u8],)));
         if let Some(old_topic) = topic {
             let mut parser = VmValueParser::new(old_topic.as_slice());
-            let r: Vec<Topic> = parser.list().unwrap();
-            Some(Topic {
-                topic_title: r[0].clone(),
-                topic_detail: r[1].clone(),
-            })
+            let r: Topic = parser.read().unwrap();
+            Some(r)
         } else {
             None
         }

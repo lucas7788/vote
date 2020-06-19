@@ -1,7 +1,9 @@
 use super::*;
 
 use hexutil::{read_hex, to_hex};
+use ostd::abi::VmValueBuilder;
 use ostd::contract::governance::PeerPoolMap;
+use ostd::mock::build_runtime;
 
 #[test]
 fn test() {
@@ -57,4 +59,26 @@ fn test_topic() {
     let info: Topic = parser.read().unwrap();
     println!("{}", to_hex(&info.topic_title).as_str());
     println!("{}", to_hex(&info.topic_detail).as_str());
+}
+
+#[test]
+fn test_create_topic() {
+    let admin = Address::repeat_byte(1);
+    let topic_title = b"title";
+    let topc_detail = b"detail";
+    assert!(create_topic(admin, topic_title, topc_detail, 1, 4));
+    let data = read_hex("ec58bd841665cfc687036fa7c537814aa96f2e4cc5071b5f1b312d75843bdd43")
+        .unwrap_or_default();
+    let hash = unsafe { *(data.as_ptr() as *const H256) };
+    let topic = get_topic(&hash).unwrap();
+    assert_eq!(topic.topic_title, b"title");
+    let topic_info = get_topic_info(&hash).unwrap();
+    assert_eq!(topic_info.topic_title, b"title");
+
+    let voter = Address::repeat_byte(2);
+
+    let handle = build_runtime();
+    handle.timestamp(2);
+    handle.witness(&[voter]);
+    assert!(vote_topic(&hash, voter, true));
 }

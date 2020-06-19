@@ -4,6 +4,7 @@ extern crate ontio_std as ostd;
 use ostd::abi::{
     Decoder, Encoder, Error, EventBuilder, Sink, Source, VmValueDecoder, VmValueParser,
 };
+use ostd::console::debug;
 use ostd::contract::governance;
 use ostd::contract::governance::get_peer_pool;
 use ostd::contract::neo;
@@ -20,8 +21,7 @@ const SUPER_ADMIN: Address = base58!("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP");
 
 #[cfg(test)]
 mod test;
-
-// test net AWQhVvcp48JKRsAAFdxjU5Y2wm2GiUxjdw
+// test net AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r
 //local AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG
 const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG");
 
@@ -32,10 +32,33 @@ struct Topic {
 }
 
 #[derive(Encoder, Decoder)]
+struct VoterWeight {
+    voter: Address,
+    weight: U128,
+}
+
+impl<'a> VmValueDecoder<'a> for VoterWeight {
+    fn deserialize(parser: &mut VmValueParser<'a>) -> Result<Self, Error> {
+        let ty = parser.source.read_byte()?;
+        assert_eq!(ty, 0x10);
+        let _ = parser.source.read_u32()?;
+        let addr_bytes = parser.bytearray()?;
+        let addr = unsafe { *(addr_bytes.as_ptr() as *const Address) };
+        let weight_bytes = parser.bytearray()?;
+        let weight = unsafe { *(weight_bytes.as_ptr() as *const U128) };
+        Ok(VoterWeight {
+            voter: addr,
+            weight,
+        })
+    }
+}
+
+#[derive(Encoder, Decoder)]
 struct TopicInfo {
     admin: Address,
     topic_title: Vec<u8>,
     topic_detail: Vec<u8>,
+    voters: Vec<VoterWeight>,
     start_time: u64,
     end_time: u64,
     approve: u64,
@@ -50,22 +73,27 @@ impl<'a> VmValueDecoder<'a> for TopicInfo {
         let addr = unsafe { *(addr_bytes.as_ptr() as *const Address) };
         let topic_title = parser.bytearray()?;
         let topic_detail = parser.bytearray()?;
-        let start_time = parser.number()? as u64;
-        let end_time = parser.number()? as u64;
-        let approve = parser.number()? as u64;
-        let reject = parser.number()? as u64;
-        let status = parser.number()? as u8;
+        // skip voters
+        let voters: Vec<VoterWeight> = parser.read()?;
+        let start_time_bytes = parser.bytearray()?;
+        let start_time = unsafe { *(start_time_bytes.as_ptr() as *const U128) };
+        let end_time_bytes = parser.bytearray()?;
+        let end_time = unsafe { *(end_time_bytes.as_ptr() as *const U128) };
+        let approve = parser.number()?;
+        let reject = parser.number()?;
+        let status = parser.number()?;
         let hash_bytes = parser.bytearray()?;
         let hash = unsafe { *(hash_bytes.as_ptr() as *const H256) };
         Ok(TopicInfo {
             admin: addr,
             topic_title: topic_title.to_vec(),
             topic_detail: topic_detail.to_vec(),
-            start_time,
-            end_time,
-            approve,
-            reject,
-            status,
+            voters,
+            start_time: start_time as u64,
+            end_time: end_time as u64,
+            approve: approve as u64,
+            reject: reject as u64,
+            status: status as u8,
             hash,
         })
     }
@@ -139,6 +167,7 @@ fn create_topic(
         admin,
         topic_title: topic_title.to_vec(),
         topic_detail: topic_detail.to_vec(),
+        voters: vec![],
         start_time,
         end_time,
         approve: 0,
@@ -362,14 +391,35 @@ fn get_topic_info(hash: &H256) -> Option<TopicInfo> {
     if let Some(temp) = info {
         return Some(temp);
     } else {
-        let res = neo::call_contract(&NEO_VOTE_CONTRACT_ADDRESS, ("getTopicInfo", (hash,)));
+        debug("22222");
+        let res = neo::call_contract(
+            &NEO_VOTE_CONTRACT_ADDRESS,
+            ("getTopicInfo", (hash.as_ref() as &[u8],)),
+        );
         if let Some(r) = res {
+            debug("111");
+            debug(&format!("{}", r.len()));
+            debug(str::from_utf8(r.as_slice()).unwrap_or_default());
             let mut parser = VmValueParser::new(r.as_slice());
-            let topic_info: TopicInfo = parser.read().unwrap();
+            let topic_info: TopicInfo = parser.list().unwrap();
             return Some(topic_info);
         } else {
             None
         }
+    }
+}
+
+fn get_topic_info_bytes(hash: &H256) -> Vec<u8> {
+    let res = neo::call_contract(
+        &NEO_VOTE_CONTRACT_ADDRESS,
+        ("getTopicInfo", (hash.as_ref() as &[u8],)),
+    );
+    if let Some(r) = res {
+        debug("111");
+        debug(&format!("{}", r.len()));
+        return r;
+    } else {
+        vec![]
     }
 }
 
@@ -401,6 +451,10 @@ pub fn invoke() {
         b"getTopicInfo" => {
             let hash = source.read().expect("parameter should be H256");
             sink.write(get_topic_info(hash));
+        }
+        b"get_topic_info_bytes" => {
+            let hash = source.read().expect("parameter should be H256");
+            sink.write(get_topic_info_bytes(hash))
         }
         b"createTopic" => {
             let (admin, topic_title, topic_detail, start_time, end_time) = source.read().unwrap();

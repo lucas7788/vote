@@ -37,3 +37,12 @@ fn test_parse_topic_info() {
     let mut parser = VmValueParser::new(data.as_slice());
     let topic_info: TopicInfo = parser.list().unwrap();
 }
+
+#[test]
+fn test_voter_info() {
+    let data = read_hex("6400100200000010020000000014000000961e12a400c10ddc9c88aa3b9fce5405152a6c470402000000000000000000000000000000100200000000140000005bf56926791d1da9b1992ca95adad31471f2a6810401000000000000000000000000000000").unwrap_or_default();
+    let mut source = Source::new(data.as_slice());
+    let da: Vec<u8> = source.read().unwrap();
+    let mut parser = VmValueParser::new(da.as_slice());
+    let info: Vec<VotedInfo> = parser.read().unwrap();
+}

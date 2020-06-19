@@ -23,12 +23,26 @@ const SUPER_ADMIN: Address = base58!("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP");
 mod test;
 // test net AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r
 //local AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG
-const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG");
+const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r");
 
 #[derive(Encoder, Decoder)]
 struct Topic {
     topic_title: Vec<u8>,
     topic_detail: Vec<u8>,
+}
+
+impl VmValueDecoder for Topic {
+    fn deserialize(parser: &mut VmValueParser) -> Result<Self, Error> {
+        let ty = parser.source.read_byte()?;
+        assert_eq!(ty,0x10);
+        let _ = parser.source.read_u32()?;
+        let topic_title = parser.bytearray()?;
+        let topic_detail = parser.bytearray()?;
+        Ok(Topic{
+            topic_title:topic_title.to_vec(),
+            topic_detail:topic_detail.to_vec(),
+        })
+    }
 }
 
 #[derive(Encoder, Decoder)]
@@ -108,7 +122,11 @@ struct VotedInfo {
 
 impl<'a> VmValueDecoder<'a> for VotedInfo {
     fn deserialize(parser: &mut VmValueParser<'a>) -> Result<Self, Error> {
-        let addr = parser.address()?;
+        let ty = parser.source.read_byte()?;
+        assert_eq!(ty, 0x10);
+        let _ = parser.source.read_u32()?;
+        let addr_bytes = parser.bytearray()?;
+        let addr = unsafe { *(addr_bytes.as_ptr() as *const Address) };
         let approve_or_reject = parser.bool()?;
         Ok(VotedInfo {
             voter: addr.clone(),
@@ -194,10 +212,10 @@ fn get_topic(hash: &H256) -> Option<Topic> {
     if let Some(temp) = res {
         return Some(temp);
     } else {
-        let topic = neo::call_contract(&NEO_VOTE_CONTRACT_ADDRESS, ("getTopic", (hash,)));
+        let topic = neo::call_contract(&NEO_VOTE_CONTRACT_ADDRESS, ("getTopic", (hash.as_ref() as &[u8],)));
         if let Some(old_topic) = topic {
             let mut parser = VmValueParser::new(old_topic.as_slice());
-            let r: Vec<Vec<u8>> = parser.list().unwrap();
+            let r: Vec<Topic> = parser.list().unwrap();
             Some(Topic {
                 topic_title: r[0].clone(),
                 topic_detail: r[1].clone(),
@@ -207,6 +225,16 @@ fn get_topic(hash: &H256) -> Option<Topic> {
         }
     }
 }
+
+fn get_topic_bytes(hash: &H256) -> Vec<u8> {
+    let topic = neo::call_contract(&NEO_VOTE_CONTRACT_ADDRESS, ("getTopic", (hash.as_ref() as &[u8],)));
+    if let Some(old_topic) = topic {
+        old_topic
+    } else {
+        vec![]
+    }
+}
+
 
 fn cancel_topic(hash: &H256) -> bool {
     let topic_info = get_topic_info(hash);
@@ -312,20 +340,28 @@ fn get_voted_address(hash: &H256) -> Vec<VotedInfo> {
     if voted_info.len() != 0 {
         return voted_info;
     }
-    let res = neo::call_contract(&NEO_VOTE_CONTRACT_ADDRESS, ("getVotedAddress", (hash,)));
+    let res = neo::call_contract(
+        &NEO_VOTE_CONTRACT_ADDRESS,
+        ("getVotedAddress", (hash.as_ref() as &[u8],)),
+    );
     if let Some(r) = res {
         let mut parser = VmValueParser::new(r.as_slice());
-        let info: Vec<Vec<u8>> = parser.read().unwrap();
-        let mut r: Vec<VotedInfo> = vec![];
-        for item in info.iter() {
-            let mut parser = VmValueParser::new(item);
-            let vi = parser.list().unwrap();
-            r.push(vi);
-        }
-        r
+        let info: Vec<VotedInfo> = parser.read().unwrap();
+        info
     } else {
         vec![]
     }
+}
+
+fn get_voted_address_bytes(hash: &H256) -> Vec<u8> {
+    let res = neo::call_contract(
+        &NEO_VOTE_CONTRACT_ADDRESS,
+        ("getVotedAddress", (hash.as_ref() as &[u8],)),
+    );
+    if let Some(r) = res {
+        return r;
+    }
+    vec![]
 }
 
 fn get_topic_info_list_by_admin(admin: &Address) -> Vec<TopicInfo> {
@@ -391,15 +427,11 @@ fn get_topic_info(hash: &H256) -> Option<TopicInfo> {
     if let Some(temp) = info {
         return Some(temp);
     } else {
-        debug("22222");
         let res = neo::call_contract(
             &NEO_VOTE_CONTRACT_ADDRESS,
             ("getTopicInfo", (hash.as_ref() as &[u8],)),
         );
         if let Some(r) = res {
-            debug("111");
-            debug(&format!("{}", r.len()));
-            debug(str::from_utf8(r.as_slice()).unwrap_or_default());
             let mut parser = VmValueParser::new(r.as_slice());
             let topic_info: TopicInfo = parser.list().unwrap();
             return Some(topic_info);
@@ -415,8 +447,6 @@ fn get_topic_info_bytes(hash: &H256) -> Vec<u8> {
         ("getTopicInfo", (hash.as_ref() as &[u8],)),
     );
     if let Some(r) = res {
-        debug("111");
-        debug(&format!("{}", r.len()));
         return r;
     } else {
         vec![]
@@ -454,7 +484,7 @@ pub fn invoke() {
         }
         b"get_topic_info_bytes" => {
             let hash = source.read().expect("parameter should be H256");
-            sink.write(get_topic_info_bytes(hash))
+            sink.write(get_topic_info_bytes(hash));
         }
         b"createTopic" => {
             let (admin, topic_title, topic_detail, start_time, end_time) = source.read().unwrap();
@@ -478,9 +508,13 @@ pub fn invoke() {
             let (hash, voter) = source.read().unwrap();
             sink.write(get_voted_info(hash, voter));
         }
-        b"get_voted_address" => {
+        b"getVotedAddress" => {
             let hash = source.read().unwrap();
             sink.write(get_voted_address(hash));
+        }
+        b"get_voted_address_bytes" => {
+            let hash = source.read().unwrap();
+            sink.write(get_voted_address_bytes(hash));
         }
         b"getTopicInfoListByAdmin" => {
             let admin = source.read().unwrap();

@@ -4,9 +4,8 @@ extern crate ontio_std as ostd;
 use ostd::abi::{
     Decoder, Encoder, Error, EventBuilder, Sink, Source, VmValueDecoder, VmValueParser,
 };
-use ostd::console::debug;
 use ostd::contract::governance;
-use ostd::contract::governance::get_peer_pool;
+use ostd::contract::governance::{get_peer_info, get_peer_pool};
 use ostd::contract::neo;
 use ostd::database;
 use ostd::macros::base58;
@@ -152,7 +151,7 @@ fn migrate(
 }
 
 fn list_admins() -> Vec<Address> {
-    let peer_pool_map = governance::get_peer_pool();
+    let peer_pool_map = get_peer_pool();
     let mut res: Vec<Address> = vec![];
     for item in peer_pool_map.peer_pool_map.iter() {
         res.push(item.address);
@@ -328,11 +327,9 @@ fn list_topic_hash() -> Vec<H256> {
 }
 
 fn get_voter_weight(voter: &Address) -> u64 {
-    let peer_pool_map = governance::get_peer_pool();
-    for item in peer_pool_map.peer_pool_map.iter() {
-        if &item.address == voter {
-            return item.init_pos + item.total_pos;
-        }
+    let item = governance::get_peer_info(voter);
+    if &item.address != &Address::new([0u8; 20]) && &item.address == voter {
+        return item.init_pos + item.total_pos;
     }
     0
 }
@@ -434,13 +431,10 @@ fn get_all_voted_info(hash: &H256) -> Vec<VotedInfo> {
 }
 
 fn is_admin(admin: &Address) -> bool {
-    let peer_pool_map = get_peer_pool();
-    for item in peer_pool_map.peer_pool_map.iter() {
-        if &item.address == admin {
-            return true;
-        }
-    }
-    false
+    let peer_info = get_peer_info(admin);
+    assert_ne!(&peer_info.peer_pubkey_addr, &Address::new([0u8; 20]));
+    assert_eq!(&peer_info.peer_pubkey_addr, admin);
+    true
 }
 
 fn get_topic_info(hash: &H256) -> Option<TopicInfo> {

@@ -10,7 +10,10 @@ use ostd::contract::neo;
 use ostd::database;
 use ostd::macros::base58;
 use ostd::prelude::*;
-use ostd::runtime::{check_witness, contract_migrate, input, ret, sha256, timestamp};
+use ostd::runtime::{
+    check_witness, contract_migrate, current_txhash, input, ret, timestamp,
+};
+use ostd::console::debug;
 
 const PRE_TOPIC: &[u8] = b"01";
 const PRE_TOPIC_INFO: &[u8] = b"02";
@@ -22,7 +25,7 @@ const SUPER_ADMIN: Address = base58!("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP");
 mod test;
 // test net AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r
 //local AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG
-const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r");
+const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG");
 
 #[derive(Encoder, Decoder)]
 struct Topic {
@@ -169,15 +172,15 @@ fn create_topic(
     assert!(check_witness(&admin));
     assert!(is_admin(&admin));
     assert!(start_time < end_time);
-    let content: Vec<u8> = [topic_title, topic_detail].concat();
-    let hash = sha256(content);
-    let key_topic = get_key(PRE_TOPIC, hash.as_ref());
-    let topic = database::get::<_, Topic>(key_topic.as_slice());
-    assert!(topic.is_none());
+    let cur = timestamp();
+    assert!(cur < end_time);
+
+    let hash = current_txhash();
     let tc = Topic {
         topic_title: topic_title.to_vec(),
         topic_detail: topic_detail.to_vec(),
     };
+    let key_topic = get_key(PRE_TOPIC, hash.as_ref());
     database::put(key_topic, tc);
     let key_topic_info = get_key(PRE_TOPIC_INFO, hash.as_ref());
     let info = TopicInfo {
@@ -328,9 +331,11 @@ fn list_topic_hash() -> Vec<H256> {
 
 fn get_voter_weight(voter: &Address) -> u64 {
     let item = governance::get_peer_info(voter);
+    debug("1111");
     if &item.address != &Address::new([0u8; 20]) && &item.address == voter {
         return item.init_pos + item.total_pos;
     }
+    debug("22222");
     0
 }
 
@@ -523,6 +528,10 @@ pub fn invoke() {
         b"voteTopic" => {
             let (hash, voter, approve_or_reject) = source.read().unwrap();
             sink.write(vote_topic(hash, voter, approve_or_reject));
+        }
+        b"getVoterWeight" => {
+            let voter = source.read().unwrap();
+            sink.write(get_voter_weight(voter));
         }
         b"getVotedInfo" => {
             let (hash, voter) = source.read().unwrap();

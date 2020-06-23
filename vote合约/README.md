@@ -92,21 +92,21 @@
 
 ## Vote合约具体接口设计
 
-1. def init()  remove
+1. def init()  not need
 合约初始化方法
 SuperAdmin 有权调用，其他人不能调用
 
-2. def setAdmin(admins)   remove
+2. def setAdmin(admins)   not need
 SuperAdmin设置哪些地址是Admin.
 参数介绍
 * admin: 地址数组，例如：['AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP','Ac9JHT6gFh6zxpfv4Q7ZPLD4xLhzcpRTWt']
 
-3. def listAdmins()
+3. def listAdmins() 
 查询哪些地址是Admin,所有用户均可调用
 
 返回值例子：
 ```
-["dca1305cc8fc2b3d3127a2c4849b43301545d84e","df6fd120388b8bb62b4792a8fe76f8f8d69f4527"]
+["AT4fXp36Ui22Lbh5ZJUCRBFDJ7axkLyUFM"]
 ```
 
 4. def createTopic(admin, topic_title, topic_detail, startTime, endTime)
@@ -117,50 +117,83 @@ Admin针对Ontology重大治理升级事件发起一个Topic，并设置该Topic
 * topic_detail String, 重大治理升级的详细描述信息，例如：'Update the Governance Strategy, Mortgage unlocking cycle changed from 2 months to 1 month, upgrade Time: 2020-01-03 11:02:18UST'
 * startTime u32, Unix时间戳,用来设定该Topic的投票开始时间
 * endTime u32, Unix时间戳,用来设定该Topic的投票结束时间
-* voters 投票地址和权重的数组， 例如：[['AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP',100000],['Ac9JHT6gFh6zxpfv4Q7ZPLD4xLhzcpRTWt',100000]]
 
-该方法执行成功的时候会推送事件，其中包含该Topic的hash值，接下来的操作会用到该值。事件格式["createTopic", "hash", "topic_title", "topic_detail"],
+
+该方法执行成功的时候会推送事件，其中包含该Topic的hash值(也是该交易的hash)，接下来的操作会用到该值。事件格式["createTopic", "hash", "topic_title", "topic_detail"],
 事件例子
 ```
 ["637265617465546f706963","f6e0a1e2ac41945a9aa7ff8a8aaa0cebc12a3bcc981a929ad5cf810a090e11ae","31","3131"]
 ```
 
-5. def setVoterForTopic(hash, voters)
+5. def setVoterForTopic(hash, voters)   not need
 Topic的发起人有权调用该方法设置哪些地址可以对该事件进行投票。
 
 参数介绍：
 * hash bytearray Topic hash 是`createTopic`方法执行成功后推送出来的值
 * voters 地址和权重数组， 不同地址都有不同的投票权重，例如：[['AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP',100000],['Ac9JHT6gFh6zxpfv4Q7ZPLD4xLhzcpRTWt',100000]]
 
-6. def listTopics()
+6. def listTopics()  
 列出所有的Topic hash值，所以返回值是hash值数组，注意该方法仅返回hash值数组，而不返回Topic具体内容。
 
 返回值示例
 ```
-["c5c03df1206eae087ae5613d296e2e1a9277a04cbb3a4f4e292e0ae821afda08"]
+["76a8cd9be66550c338051000d158da701f3be67bd11391db579e699c2928abbb"]
 ```
+
 7. def getTopic(hash)
 根据Topic hash值 查询Topic具体内容
 参数介绍
-* hash bytearray, Topic hash值
+* hash H256, Topic hash值
 
-返回值是[topic_title, topic_detail]
+
+
+返回值是Option<Topic>, option表示该值可以为空
+```
+struct Topic {
+    topic_title: Vec<u8>,  //字节数组
+    topic_detail: Vec<u8>, 
+}
+```
+
+* 序列化规则
+如果查不到数据，序列化false
+如果查到数据，序列化true,然后序列化topic结构体
+
 
 返回值示例
-```
-["31","3131"]
-```
+
+
 
 8. def getTopicInfo(hash)
+
 根据Topic hash 查询TopicInfo, 包括[admin, topic, voter address,startTime, endTime, approve amount, reject amount, state, topic hash]
+
 参数介绍
 * hash bytearray, Topic hash值
 返回值介绍
+Option<TopicInfo>
+
+TopicInfo struct字段信息
+```
+struct TopicInfo {
+    admin: Address,
+    topic_title: Vec<u8>, //字节数组
+    topic_detail: Vec<u8>,
+    voters: Vec<VoterWeight>, //自定义结构体
+    start_time: u64,
+    end_time: u64,
+    approve: u64,
+    reject: u64,
+    status: u8,
+    hash: H256, //长度为32的字节数组
+}
+```
+
 * [admin, topic, voter address,startTime, endTime, approve amount, reject amount, status]
    * admin Topic的创建者
    * topic_title Topic标题
    * topic_detail Topic详细描述信息
-   * voter address 所有的被授权投票的地址和权重的数组，例如：[['AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP',100000],['Ac9JHT6gFh6zxpfv4Q7ZPLD4xLhzcpRTWt',100000]]
+   * voter address VoterWeight数组,被授权投票的地址和权重的数组
    * startTime 该Topic投票开始时间
    * endTime， 该Topic投票结束时间
    * approve amount， 该Topic赞成者的总量，是赞成者权重的累加
@@ -173,7 +206,7 @@ Topic的发起人有权调用该方法设置哪些地址可以对该事件进行
  ["dca1305cc8fc2b3d3127a2c4849b43301545d84e","31","3131",[["dca1305cc8fc2b3d3127a2c4849b43301545d84e","e803000000000000"],["df6fd120388b8bb62b4792a8fe76f8f8d69f4527","e803000000000000"]],"01","01","00","00","01", "c5c03df1206eae087ae5613d296e2e1a9277a04cbb3a4f4e292e0ae821afda08"]
 ```
 
-9. def getVoters(hash)
+9. def getVoters(hash)  not need
 根据Topic hash 查询该Topic的所有被授权的投票者地址
 参数介绍
 hash bytearray, Topic hash
@@ -201,17 +234,36 @@ Event示例
 
 12. getVotedAddress(hash)
 根据TopicHash查询已经投过该Topic的地址和投票内容, 1表示赞成，2表示反对，其他表示未投票。
-示例
+
+返回值是 VotedInfo数组
 ```
-[["dca1305cc8fc2b3d3127a2c4849b43301545d84e","01"]]
+struct VotedInfo {
+    voter: Address,
+    weight: u64,
+    approve_or_reject: bool,
+} 
 ```
+返回值拿到的是hex需要反序列化
+
 
 13. cancelTopic(hash)
 根据Topic Hash 设置Topic状态为0，0表示Topic失效， 1表示Topic正常，状态为0的Topic，Owallet就不要显示了
 
 14. getTopicInfoListByAdmin(admin)
 根据admin查询该admin发起的所有Topic，返回值是TopicInfo的数组，TopicInfo各个字段的意思请看getTopicInfo中的介绍
-返回值示例
+返回值 TopicInfo数组
 ```
-[["dca1305cc8fc2b3d3127a2c4849b43301545d84e","61",null,"01","02","00","00","01","c5c03df1206eae087ae5613d296e2e1a9277a04cbb3a4f4e292e0ae821afda08" ],["dca1305cc8fc2b3d3127a2c4849b43301545d84e","6162",null,"01","02","00","00","01","c5c03df1206eae087ae5613d296e2e1a9277a04cbb3a4f4e292e0ae821afda08"]]
+struct TopicInfo {
+    admin: Address,
+    topic_title: Vec<u8>,
+    topic_detail: Vec<u8>,
+    voters: Vec<VoterWeight>,
+    start_time: u64,
+    end_time: u64,
+    approve: u64,
+    reject: u64,
+    status: u8,
+    hash: H256,
+}
 ```
+

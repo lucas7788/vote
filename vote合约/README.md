@@ -206,7 +206,7 @@ struct TopicInfo {
  ["dca1305cc8fc2b3d3127a2c4849b43301545d84e","31","3131",[["dca1305cc8fc2b3d3127a2c4849b43301545d84e","e803000000000000"],["df6fd120388b8bb62b4792a8fe76f8f8d69f4527","e803000000000000"]],"01","01","00","00","01", "c5c03df1206eae087ae5613d296e2e1a9277a04cbb3a4f4e292e0ae821afda08"]
 ```
 
-9. def getVoters(hash)  not need
+9. def getVoters(hash)  not need   用listAdmins代替
 根据Topic hash 查询该Topic的所有被授权的投票者地址
 参数介绍
 hash bytearray, Topic hash

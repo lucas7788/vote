@@ -4,16 +4,14 @@ extern crate ontio_std as ostd;
 use ostd::abi::{
     Decoder, Encoder, Error, EventBuilder, Sink, Source, VmValueDecoder, VmValueParser,
 };
+use ostd::console::debug;
 use ostd::contract::governance;
 use ostd::contract::governance::{get_peer_info, get_peer_pool};
 use ostd::contract::neo;
 use ostd::database;
 use ostd::macros::base58;
 use ostd::prelude::*;
-use ostd::runtime::{
-    check_witness, contract_migrate, current_txhash, input, ret, timestamp,
-};
-use ostd::console::debug;
+use ostd::runtime::{check_witness, contract_migrate, current_txhash, input, ret, timestamp};
 
 const PRE_TOPIC: &[u8] = b"01";
 const PRE_TOPIC_INFO: &[u8] = b"02";
@@ -162,17 +160,22 @@ fn list_admins() -> Vec<Address> {
     res
 }
 
+fn get_timestamp() -> u64 {
+    return timestamp()
+}
+
 fn create_topic(
     admin: Address,
     topic_title: &[u8],
     topic_detail: &[u8],
-    start_time: u64,
-    end_time: u64,
+    start_time: U128,
+    end_time: U128,
 ) -> bool {
     assert!(check_witness(&admin));
     assert!(is_admin(&admin));
     assert!(start_time < end_time);
-    let cur = timestamp();
+    let cur = timestamp() as U128;
+    debug(cur.to_string().as_str());
     assert!(cur < end_time);
 
     let hash = current_txhash();
@@ -188,8 +191,8 @@ fn create_topic(
         topic_title: topic_title.to_vec(),
         topic_detail: topic_detail.to_vec(),
         voters: vec![],
-        start_time,
-        end_time,
+        start_time: start_time as u64,
+        end_time: end_time as u64,
         approve: 0,
         reject: 0,
         status: 1,
@@ -220,8 +223,8 @@ fn get_topic(hash: &H256) -> Option<Topic> {
         );
         if let Some(old_topic) = topic {
             let mut parser = VmValueParser::new(old_topic.as_slice());
-            let r: Topic = parser.read().unwrap();
-            Some(r)
+            let r: Option<Topic> = parser.read().ok();
+            r
         } else {
             None
         }
@@ -454,8 +457,8 @@ fn get_topic_info(hash: &H256) -> Option<TopicInfo> {
         );
         if let Some(r) = res {
             let mut parser = VmValueParser::new(r.as_slice());
-            let topic_info: TopicInfo = parser.list().unwrap();
-            return Some(topic_info);
+            let topic_info: Option<TopicInfo> = parser.list().ok();
+            return topic_info;
         } else {
             None
         }
@@ -510,6 +513,9 @@ pub fn invoke() {
         b"get_topic_info_bytes" => {
             let hash = source.read().expect("parameter should be H256");
             sink.write(get_topic_info_bytes(hash));
+        }
+        b"get_timestamp" => {
+            sink.write(get_timestamp());
         }
         b"createTopic" => {
             let (admin, topic_title, topic_detail, start_time, end_time) = source.read().unwrap();

@@ -42,12 +42,13 @@ fn test_parse_topic_info() {
 
 #[test]
 fn test_topic_info() {
-    let data = read_hex("010334805df2a8b2fc6b07acbecbe2c44f59b2952c0b746f7069635f7469746c650d746f7069635f636f6e74656e740010ad045f0000000050ef135f0000000040420f0000000000000000000000000001fa53f8ef6f8270564df17791778a5fbc05b24f5d7e8203e7d72dc4a8551b2667").unwrap_or_default();
+    let data = read_hex("010334805df2a8b2fc6b07acbecbe2c44f59b2952c0b746f7069635f7469746c650d746f7069635f636f6e74656e740094a8f15e00000000a4cff15e000000000000000000000000000000000000000001b141844d54e4f2a80b11ca113e90f0e50c70b39ed21d286884e76e6af73d9522").unwrap_or_default();
     let mut source = Source::new(data.as_slice());
     let boo: bool = source.read().unwrap();
     assert!(boo);
     let topic_info: TopicInfo = source.read().unwrap();
     println!("{}", topic_info.approve);
+    println!("{}", topic_info.reject);
 }
 
 #[test]

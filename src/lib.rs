@@ -16,7 +16,7 @@ const PRE_TOPIC: &[u8] = b"01";
 const PRE_TOPIC_INFO: &[u8] = b"02";
 const KEY_ALL_TOPIC_HASH: &[u8] = b"03";
 const PRE_VOTED: &[u8] = b"04";
-const SUPER_ADMIN: Address = base58!("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP");
+const ADMIN: Address = base58!("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP");
 
 mod basic;
 use basic::*;
@@ -36,7 +36,7 @@ fn migrate(
     email: &str,
     desc: &str,
 ) -> bool {
-    assert!(check_witness(&SUPER_ADMIN));
+    assert!(check_witness(&ADMIN));
     let addr = contract_migrate(code, vm_ty as u32, name, version, author, email, desc);
     assert_ne!(addr, Address::new([0u8; 20]));
     true

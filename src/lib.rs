@@ -25,7 +25,7 @@ use basic::*;
 mod test;
 // test net AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r
 //local AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG
-const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG");
+const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r");
 
 fn migrate(
     code: &[u8],

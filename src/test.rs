@@ -41,6 +41,16 @@ fn test_parse_topic_info() {
 }
 
 #[test]
+fn test_topic_info() {
+    let data = read_hex("010334805df2a8b2fc6b07acbecbe2c44f59b2952c0b746f7069635f7469746c650d746f7069635f636f6e74656e740010ad045f0000000050ef135f0000000040420f0000000000000000000000000001fa53f8ef6f8270564df17791778a5fbc05b24f5d7e8203e7d72dc4a8551b2667").unwrap_or_default();
+    let mut source = Source::new(data.as_slice());
+    let boo: bool = source.read().unwrap();
+    assert!(boo);
+    let topic_info: TopicInfo = source.read().unwrap();
+    println!("{}", topic_info.approve);
+}
+
+#[test]
 fn test_voter_info() {
     let data = read_hex("6400100200000010020000000014000000961e12a400c10ddc9c88aa3b9fce5405152a6c470402000000000000000000000000000000100200000000140000005bf56926791d1da9b1992ca95adad31471f2a6810401000000000000000000000000000000").unwrap_or_default();
     let mut source = Source::new(data.as_slice());

@@ -69,7 +69,7 @@ impl<'a> VmValueDecoder<'a> for VoterWeight {
 
 #[derive(Encoder, Decoder)]
 struct TopicInfo {
-    admin: Address,
+    gov_node_addr: Address,
     topic_title: Vec<u8>,
     topic_detail: Vec<u8>,
     voters: Vec<VoterWeight>,
@@ -99,7 +99,7 @@ impl<'a> VmValueDecoder<'a> for TopicInfo {
         let hash_bytes = parser.bytearray()?;
         let hash = unsafe { *(hash_bytes.as_ptr() as *const H256) };
         Ok(TopicInfo {
-            admin: addr,
+            gov_node_addr: addr,
             topic_title: topic_title.to_vec(),
             topic_detail: topic_detail.to_vec(),
             voters,
@@ -151,9 +151,9 @@ fn migrate(
     true
 }
 
-fn list_admins() -> Vec<Address> {
+fn list_gov_nodes() -> Vec<Address> {
     let peer_pool_map = get_peer_pool();
-    let mut res: Vec<Address> = vec![];
+    let mut res: Vec<Address> = Vec::with_capacity(peer_pool_map.peer_pool_map.len());
     for item in peer_pool_map.peer_pool_map.iter() {
         res.push(item.address);
     }
@@ -161,18 +161,18 @@ fn list_admins() -> Vec<Address> {
 }
 
 fn get_timestamp() -> u64 {
-    return timestamp()
+    return timestamp();
 }
 
 fn create_topic(
-    admin: Address,
+    gov_node_addr: Address,
     topic_title: &[u8],
     topic_detail: &[u8],
     start_time: U128,
     end_time: U128,
 ) -> bool {
-    assert!(check_witness(&admin));
-    assert!(is_admin(&admin));
+    assert!(check_witness(&gov_node_addr));
+    assert!(is_gov_node(&gov_node_addr));
     assert!(start_time < end_time);
     let cur = timestamp() as U128;
     debug(cur.to_string().as_str());
@@ -187,7 +187,7 @@ fn create_topic(
     database::put(key_topic, tc);
     let key_topic_info = get_key(PRE_TOPIC_INFO, hash.as_ref());
     let info = TopicInfo {
-        admin,
+        gov_node_addr,
         topic_title: topic_title.to_vec(),
         topic_detail: topic_detail.to_vec(),
         voters: vec![],
@@ -247,7 +247,7 @@ fn cancel_topic(hash: &H256) -> bool {
     let topic_info = get_topic_info(hash);
     if let Some(mut info) = topic_info {
         assert_eq!(info.status, 1);
-        assert!(check_witness(&info.admin));
+        assert!(check_witness(&info.gov_node_addr));
         info.status = 0;
         let key = get_key(PRE_TOPIC_INFO, hash.as_ref());
         database::put(key, info);
@@ -259,8 +259,8 @@ fn cancel_topic(hash: &H256) -> bool {
 
 fn vote_topic(hash: &H256, voter: Address, approve_or_reject: bool) -> bool {
     assert!(check_witness(&voter));
-    assert!(is_admin(&voter));
-    let mut info = get_topic_info(hash).expect("not exist topic info");
+    assert!(is_gov_node(&voter));
+    let info = get_topic_info(hash).expect("not exist topic info");
     assert!(info.status == 1);
     let cur = timestamp();
     assert!(info.start_time < cur);
@@ -272,23 +272,12 @@ fn vote_topic(hash: &H256, voter: Address, approve_or_reject: bool) -> bool {
         assert!(approve_or_reject == true);
     }
     let weight = get_voter_weight(&voter);
-    if approve_or_reject {
-        info.approve += weight;
-        if vote_res == 2 {
-            info.reject -= weight;
-        }
-    } else {
-        info.reject += weight;
-        if vote_res == 1 {
-            info.approve -= weight;
-        }
-    }
     let vi = VotedInfo {
         voter,
         weight,
         approve_or_reject,
     };
-    update_voted_info(hash, vi);
+    update_voted_info(hash, vi, info);
     EventBuilder::new()
         .string("voteTopic")
         .h256(hash)
@@ -298,21 +287,38 @@ fn vote_topic(hash: &H256, voter: Address, approve_or_reject: bool) -> bool {
     true
 }
 
-fn update_voted_info(hash: &H256, info: VotedInfo) {
+fn update_voted_info(hash: &H256, info: VotedInfo, mut topic_info: TopicInfo) {
     let mut voted_info = get_all_voted_info(hash);
     let mut has_voted = false;
+    let mut approve = 0;
+    let mut reject = 0;
     for i in voted_info.iter_mut() {
+        let weight = get_voter_weight(&i.voter);
+        i.weight = weight;
+        if i.approve_or_reject {
+            approve += i.weight;
+        } else {
+            reject += i.weight;
+        }
         if i.voter == info.voter {
             i.approve_or_reject = info.approve_or_reject;
             has_voted = true;
-            break;
         }
     }
     if !has_voted {
-        voted_info.push(info)
+        if info.approve_or_reject {
+            approve += info.weight;
+        } else {
+            reject += info.weight;
+        }
+        voted_info.push(info);
     }
     let key = get_key(PRE_VOTED, hash.as_ref());
     database::put(key, voted_info);
+    topic_info.reject = reject;
+    topic_info.approve = approve;
+    let key = get_key(PRE_TOPIC_INFO, hash.as_ref());
+    database::put(key.as_slice(), topic_info);
 }
 
 /// ****all user can invoke method ***********
@@ -334,11 +340,9 @@ fn list_topic_hash() -> Vec<H256> {
 
 fn get_voter_weight(voter: &Address) -> u64 {
     let item = governance::get_peer_info(voter);
-    debug("1111");
     if &item.address != &Address::new([0u8; 20]) && &item.address == voter {
         return item.init_pos + item.total_pos;
     }
-    debug("22222");
     0
 }
 
@@ -371,18 +375,18 @@ fn get_voted_address_bytes(hash: &H256) -> Vec<u8> {
     vec![]
 }
 
-fn get_topic_info_list_by_admin(admin: &Address) -> Vec<TopicInfo> {
+fn get_topic_info_list_by_addr(gov_node_addr: &Address) -> Vec<TopicInfo> {
     let hash_list = database::get::<_, Vec<H256>>(KEY_ALL_TOPIC_HASH).unwrap_or(vec![]);
     let mut res = Vec::with_capacity(20);
     for hash in hash_list.iter() {
         let info = get_topic_info(hash).unwrap();
-        if &info.admin == admin {
+        if &info.gov_node_addr == gov_node_addr {
             res.push(info);
         }
     }
     let neo_res = neo::call_contract(
         &NEO_VOTE_CONTRACT_ADDRESS,
-        ("getTopicInfoListByAdmin", (admin,)),
+        ("getTopicInfoListByAdmin", (gov_node_addr,)),
     );
     if let Some(neo_r) = neo_res {
         let mut parser = VmValueParser::new(neo_r.as_slice());
@@ -438,10 +442,10 @@ fn get_all_voted_info(hash: &H256) -> Vec<VotedInfo> {
     database::get::<_, Vec<VotedInfo>>(key).unwrap_or(vec![])
 }
 
-fn is_admin(admin: &Address) -> bool {
-    let peer_info = get_peer_info(admin);
+fn is_gov_node(gov_node_addr: &Address) -> bool {
+    let peer_info = get_peer_info(gov_node_addr);
     assert_ne!(&peer_info.peer_pubkey_addr, &Address::new([0u8; 20]));
-    assert_eq!(&peer_info.peer_pubkey_addr, admin);
+    assert_eq!(&peer_info.peer_pubkey_addr, gov_node_addr);
     true
 }
 
@@ -492,8 +496,8 @@ pub fn invoke() {
             let (code, vm_ty, name, version, author, email, desc) = source.read().unwrap();
             sink.write(migrate(code, vm_ty, name, version, author, email, desc))
         }
-        b"listAdmins" => {
-            sink.write(list_admins());
+        b"listGovNodes" => {
+            sink.write(list_gov_nodes());
         }
         b"listTopics" => {
             sink.write(list_topic_hash());
@@ -555,9 +559,9 @@ pub fn invoke() {
             let hash = source.read().unwrap();
             sink.write(get_voted_address_bytes(hash));
         }
-        b"getTopicInfoListByAdmin" => {
+        b"getTopicInfoListByAddr" => {
             let admin = source.read().unwrap();
-            sink.write(get_topic_info_list_by_admin(admin));
+            sink.write(get_topic_info_list_by_addr(admin));
         }
         _ => panic!(),
     }

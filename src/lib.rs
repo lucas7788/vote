@@ -27,6 +27,7 @@ mod test;
 //local AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG
 const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r");
 
+/// upgrade contract, only admin has the right to invoke this method
 fn migrate(
     code: &[u8],
     vm_ty: U128,
@@ -42,6 +43,7 @@ fn migrate(
     true
 }
 
+/// query all the consensus and candidate nodes address
 fn list_gov_nodes() -> Vec<Address> {
     let peer_pool_map = get_peer_pool();
     let mut res: Vec<Address> = Vec::with_capacity(peer_pool_map.peer_pool_map.len());
@@ -55,6 +57,9 @@ fn get_timestamp() -> u64 {
     return timestamp();
 }
 
+/// create topic
+/// all the consensus and candidate nodes have the right to create topic
+///
 fn create_topic(
     gov_node_addr: Address,
     topic_title: &[u8],
@@ -101,6 +106,7 @@ fn create_topic(
     true
 }
 
+/// query topic
 fn get_topic(hash: &H256) -> Option<Topic> {
     let key = get_key(PRE_TOPIC, hash.as_ref());
     let res = database::get::<_, Topic>(key);
@@ -133,20 +139,27 @@ fn get_topic_bytes(hash: &H256) -> Vec<u8> {
     }
 }
 
+/// cancel topic
+/// only the creator of the topic has the right to invoke
 fn cancel_topic(hash: &H256) -> bool {
     let topic_info = get_topic_info(hash);
     if let Some(mut info) = topic_info {
         assert_eq!(info.status, 1);
+        let cur = timestamp();
+        assert!(cur < info.end_time);
         assert!(check_witness(&info.gov_node_addr));
         info.status = 0;
         let key = get_key(PRE_TOPIC_INFO, hash.as_ref());
         database::put(key, info);
     } else {
-        panic!("no the topic")
+        panic!("the topic does not exist")
     }
     true
 }
 
+/// approve or reject a topic
+/// only the consensus and candidate nodes have the right to invoke
+/// approve_or_reject is true indicate approve, false indicate reject
 fn vote_topic(hash: &H256, voter: Address, approve_or_reject: bool) -> bool {
     assert!(check_witness(&voter));
     assert!(is_gov_node(&voter));

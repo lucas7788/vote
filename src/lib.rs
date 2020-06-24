@@ -14,8 +14,10 @@ use ostd::runtime::{check_witness, contract_migrate, current_txhash, input, ret,
 
 const PRE_TOPIC: &[u8] = b"01";
 const PRE_TOPIC_INFO: &[u8] = b"02";
-const KEY_ALL_TOPIC_HASH: &[u8] = b"03";
-const PRE_VOTED: &[u8] = b"04";
+const PRE_VOTED: &[u8] = b"03";
+const PRE_TOPIC_HASH: &[u8] = b"04";
+const KEY_CUR_HASH_NUM: &[u8] = b"05";
+
 const ADMIN: Address = base58!("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP");
 
 mod basic;
@@ -94,9 +96,12 @@ fn create_topic(
         hash: hash.clone(),
     };
     database::put(key_topic_info, info);
-    let mut all_hash: Vec<H256> = database::get(KEY_ALL_TOPIC_HASH).unwrap_or(vec![]);
-    all_hash.push(hash.clone());
-    database::put(KEY_ALL_TOPIC_HASH, all_hash);
+    let next_hash_key = get_current_hash_num();
+    database::put(
+        get_key(PRE_TOPIC_HASH, next_hash_key.to_string().as_bytes()),
+        &hash,
+    );
+    database::put(KEY_CUR_HASH_NUM, next_hash_key + 1);
     EventBuilder::new()
         .string("createTopic")
         .h256(&hash)
@@ -104,6 +109,24 @@ fn create_topic(
         .bytearray(topic_detail)
         .notify();
     true
+}
+
+fn get_all_topic_hash_inner() -> Vec<H256> {
+    let num = get_current_hash_num();
+    let mut res: Vec<H256> = Vec::with_capacity(num as usize);
+    for i in 0..num {
+        let h = get_hash_by_num(i);
+        res.push(h);
+    }
+    res
+}
+
+fn get_hash_by_num(i: u32) -> H256 {
+    database::get::<_, H256>(get_key(PRE_TOPIC_HASH, i.to_string().as_bytes())).unwrap()
+}
+
+fn get_current_hash_num() -> u32 {
+    database::get::<_, u32>(KEY_CUR_HASH_NUM).unwrap_or(0)
 }
 
 /// query topic
@@ -231,7 +254,7 @@ fn list_topic_hash() -> Vec<H256> {
     if let Some(r) = res {
         let mut parser = VmValueParser::new(r.as_slice());
         let topics: Vec<Vec<u8>> = parser.read().unwrap();
-        let mut temp = database::get::<_, Vec<H256>>(KEY_ALL_TOPIC_HASH).unwrap_or(vec![]);
+        let mut temp = get_all_topic_hash_inner();
         for topic_hash in topics.iter() {
             let h: H256 = unsafe { *(topic_hash.as_ptr() as *const H256) };
             temp.push(h);
@@ -279,7 +302,7 @@ fn get_voted_address_bytes(hash: &H256) -> Vec<u8> {
 }
 
 fn get_topic_info_list_by_addr(gov_node_addr: &Address) -> Vec<TopicInfo> {
-    let hash_list = database::get::<_, Vec<H256>>(KEY_ALL_TOPIC_HASH).unwrap_or(vec![]);
+    let hash_list = get_all_topic_hash_inner();
     let mut res = Vec::with_capacity(20);
     for hash in hash_list.iter() {
         let info = get_topic_info(hash).unwrap();

@@ -50,7 +50,7 @@ fn list_gov_nodes() -> Vec<Address> {
     let peer_pool_map = get_peer_pool();
     let mut res: Vec<Address> = Vec::with_capacity(peer_pool_map.peer_pool_map.len());
     for item in peer_pool_map.peer_pool_map.iter() {
-        res.push(item.address);
+        res.push(item.peer_pubkey_addr);
     }
     res
 }

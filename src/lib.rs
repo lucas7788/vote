@@ -266,7 +266,7 @@ fn list_topic_hash() -> Vec<H256> {
 
 fn get_voter_weight(voter: &Address) -> u64 {
     let item = governance::get_peer_info(voter);
-    if &item.address != &Address::new([0u8; 20]) && &item.address == voter {
+    if &item.peer_pubkey_addr != &Address::new([0u8; 20]) && &item.peer_pubkey_addr == voter {
         return item.init_pos + item.total_pos;
     }
     0

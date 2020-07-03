@@ -219,16 +219,16 @@ fn update_voted_info(hash: &H256, info: VotedInfo, mut topic_info: TopicInfo) {
     let mut approve = 0;
     let mut reject = 0;
     for i in voted_info.iter_mut() {
+        if i.voter == info.voter {
+            i.approve_or_reject = info.approve_or_reject;
+            has_voted = true;
+        }
         let weight = get_voter_weight(&i.voter);
         i.weight = weight;
         if i.approve_or_reject {
             approve += i.weight;
         } else {
             reject += i.weight;
-        }
-        if i.voter == info.voter {
-            i.approve_or_reject = info.approve_or_reject;
-            has_voted = true;
         }
     }
     if !has_voted {

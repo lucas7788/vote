@@ -25,9 +25,11 @@ use basic::*;
 
 #[cfg(test)]
 mod test;
+
 // test net AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r
 //local AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG
-const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r");
+//main AJGFd2yV4RX3iWEBQDoGbWkXVGiM9qX4Ee
+const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AJGFd2yV4RX3iWEBQDoGbWkXVGiM9qX4Ee");
 
 /// upgrade contract, only admin has the right to invoke this method
 fn migrate(
@@ -147,18 +149,6 @@ fn get_topic(hash: &H256) -> Option<Topic> {
         } else {
             None
         }
-    }
-}
-
-fn get_topic_bytes(hash: &H256) -> Vec<u8> {
-    let topic = neo::call_contract(
-        &NEO_VOTE_CONTRACT_ADDRESS,
-        ("getTopic", (hash.as_ref() as &[u8],)),
-    );
-    if let Some(old_topic) = topic {
-        old_topic
-    } else {
-        vec![]
     }
 }
 
@@ -290,17 +280,6 @@ fn get_voted_address(hash: &H256) -> Vec<VotedInfo> {
     }
 }
 
-fn get_voted_address_bytes(hash: &H256) -> Vec<u8> {
-    let res = neo::call_contract(
-        &NEO_VOTE_CONTRACT_ADDRESS,
-        ("getVotedAddress", (hash.as_ref() as &[u8],)),
-    );
-    if let Some(r) = res {
-        return r;
-    }
-    vec![]
-}
-
 fn get_topic_info_list_by_addr(gov_node_addr: &Address) -> Vec<TopicInfo> {
     let hash_list = get_all_topic_hash_inner();
     let mut res = Vec::with_capacity(20);
@@ -349,20 +328,6 @@ fn get_voted_info(hash: &H256, voter: &Address) -> u8 {
     0
 }
 
-fn get_voted_info_bytes(hash: &H256, voter: &Address) -> Vec<u8> {
-    let res = neo::call_contract(
-        &NEO_VOTE_CONTRACT_ADDRESS,
-        (
-            "getVotedInfo",
-            (hash.as_ref() as &[u8], voter.as_ref() as &[u8]),
-        ),
-    );
-    if let Some(r) = res {
-        return r;
-    }
-    vec![]
-}
-
 fn get_all_voted_info(hash: &H256) -> Vec<VotedInfo> {
     let key = get_key(PRE_VOTED, hash.as_ref());
     database::get::<_, Vec<VotedInfo>>(key).unwrap_or(vec![])
@@ -395,18 +360,6 @@ fn get_topic_info(hash: &H256) -> Option<TopicInfo> {
     }
 }
 
-fn get_topic_info_bytes(hash: &H256) -> Vec<u8> {
-    let res = neo::call_contract(
-        &NEO_VOTE_CONTRACT_ADDRESS,
-        ("getTopicInfo", (hash.as_ref() as &[u8],)),
-    );
-    if let Some(r) = res {
-        return r;
-    } else {
-        vec![]
-    }
-}
-
 fn get_key(pre: &[u8], hash: &[u8]) -> Vec<u8> {
     [pre, hash].concat()
 }
@@ -432,17 +385,9 @@ pub fn invoke() {
             let hash = source.read().expect("parameter should be H256");
             sink.write(get_topic(hash));
         }
-        b"get_topic_bytes" => {
-            let hash = source.read().expect("parameter should be H256");
-            sink.write(get_topic_bytes(hash));
-        }
         b"getTopicInfo" => {
             let hash = source.read().expect("parameter should be H256");
             sink.write(get_topic_info(hash));
-        }
-        b"get_topic_info_bytes" => {
-            let hash = source.read().expect("parameter should be H256");
-            sink.write(get_topic_info_bytes(hash));
         }
         b"get_timestamp" => {
             sink.write(get_timestamp());
@@ -473,17 +418,9 @@ pub fn invoke() {
             let (hash, voter) = source.read().unwrap();
             sink.write(get_voted_info(hash, voter));
         }
-        b"get_voted_info_bytes" => {
-            let (hash, voter) = source.read().unwrap();
-            sink.write(get_voted_info_bytes(hash, voter));
-        }
         b"getVotedAddress" => {
             let hash = source.read().unwrap();
             sink.write(get_voted_address(hash));
-        }
-        b"get_voted_address_bytes" => {
-            let hash = source.read().unwrap();
-            sink.write(get_voted_address_bytes(hash));
         }
         b"getTopicInfoListByAddr" => {
             let admin = source.read().unwrap();

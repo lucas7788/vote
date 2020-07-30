@@ -30,7 +30,7 @@ mod test;
 // test net AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r
 //local AQWrGrBb6yosjuHDiALkNwVnL9qLanCMdG
 //main AJGFd2yV4RX3iWEBQDoGbWkXVGiM9qX4Ee
-const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AJGFd2yV4RX3iWEBQDoGbWkXVGiM9qX4Ee");
+const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AKzJGcCVr9wVEG95XvP3VnCDRivVjo391r");
 
 fn get_admin() -> Address {
     database::get::<_, Address>(KEY_ADMIN).unwrap_or(ADMIN)
@@ -216,6 +216,7 @@ fn vote_topic(hash: &H256, voter: Address, approve_or_reject: bool) -> bool {
     true
 }
 
+//TODO status must be 1 or 2, other should not compute
 fn update_voted_info(hash: &H256, info: VotedInfo, mut topic_info: TopicInfo) {
     let mut voted_info = get_all_voted_info(hash);
     let mut has_voted = false;

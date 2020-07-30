@@ -17,8 +17,9 @@ const PRE_TOPIC_INFO: &[u8] = b"02";
 const PRE_VOTED: &[u8] = b"03";
 const PRE_TOPIC_HASH: &[u8] = b"04";
 const KEY_CUR_HASH_NUM: &[u8] = b"05";
+const KEY_ADMIN: &[u8] = b"06";
 
-const ADMIN: Address = base58!("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP");
+const ADMIN: Address = base58!("Aejfo7ZX5PVpenRj23yChnyH64nf8T1zbu");
 
 mod basic;
 use basic::*;
@@ -31,6 +32,17 @@ mod test;
 //main AJGFd2yV4RX3iWEBQDoGbWkXVGiM9qX4Ee
 const NEO_VOTE_CONTRACT_ADDRESS: Address = base58!("AJGFd2yV4RX3iWEBQDoGbWkXVGiM9qX4Ee");
 
+fn get_admin() -> Address {
+    database::get::<_, Address>(KEY_ADMIN).unwrap_or(ADMIN)
+}
+
+fn update_admin(new_admin: &Address) -> bool {
+    let admin = get_admin();
+    assert!(check_witness(&admin));
+    database::put(KEY_ADMIN, new_admin);
+    true
+}
+
 /// upgrade contract, only admin has the right to invoke this method
 fn migrate(
     code: &[u8],
@@ -41,7 +53,8 @@ fn migrate(
     email: &str,
     desc: &str,
 ) -> bool {
-    assert!(check_witness(&ADMIN));
+    let admin = get_admin();
+    assert!(check_witness(&admin));
     let addr = contract_migrate(code, vm_ty as u32, name, version, author, email, desc);
     assert_ne!(addr, Address::new([0u8; 20]));
     true
@@ -94,7 +107,7 @@ fn create_topic(
         end_time: end_time as u64,
         approve: 0,
         reject: 0,
-        status: 1,
+        status: 1, // 1 means valid, 0 means invalid
         hash: hash.clone(),
     };
     database::put(key_topic_info, info);
@@ -337,6 +350,7 @@ fn is_gov_node(gov_node_addr: &Address) -> bool {
     let peer_info = get_peer_info(gov_node_addr);
     assert_ne!(&peer_info.peer_pubkey_addr, &Address::new([0u8; 20]));
     assert_eq!(&peer_info.peer_pubkey_addr, gov_node_addr);
+    assert!(peer_info.status == 1 || peer_info.status == 2);
     true
 }
 
@@ -371,6 +385,13 @@ pub fn invoke() {
     let action: &[u8] = source.read().unwrap();
     let mut sink = Sink::new(12);
     match action {
+        b"getAdmin" => {
+            sink.write(get_admin());
+        }
+        b"updateAdmin" => {
+            let addr = source.read().unwrap();
+            sink.write(update_admin(addr));
+        }
         b"migrate" => {
             let (code, vm_ty, name, version, author, email, desc) = source.read().unwrap();
             sink.write(migrate(code, vm_ty, name, version, author, email, desc))
